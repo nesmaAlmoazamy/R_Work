@@ -1,0 +1,465 @@
+---
+title: "HW6"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Part1.
+```{r, message=FALSE}
+library("dplyr")
+library("tidyr")
+library("ggplot2")
+library("tm")           # Text mining package
+library("wordcloud2")   # Package for building word clouds
+library("syuzhet")      # Package for sentement analysis
+library("stringr")      # Package for work with strings
+library("class")        # KNN
+library("e1071")        # For SVM
+library("igraph")
+library("SnowballC")
+library("wordcloud")
+library("randomForest")
+
+library("readr")
+```
+
+```{r, message=FALSE, warning=FALSE}
+Apple1 <- read_csv("/home/nesma/SemesterII/BusinessDataAnalytics/HW6/Apple1.csv")
+head(Apple1, 3)
+str(Apple1)
+# change encoding of our texts to “UTF-8”
+Apple1Text <- iconv(Apple1$text, to = "utf-8")
+# converting character vectors to specified encodings
+corpus1 <- Corpus(VectorSource(Apple1Text))
+#View Corpus
+inspect(corpus1[1:5])
+```
+
+```{r, message=FALSE, warning=FALSE}
+#Remove URL
+
+removeURL <- function(x) gsub('https://[[:alnum:]|[:punct:]]*', '', x) 
+corpus1 <- tm_map(corpus1, content_transformer(removeURL)) 
+inspect(corpus1[1:5])
+```
+
+```{r, message=FALSE, warning=FALSE}
+#Remove @
+removeat <- function(x) gsub("@\\w+ *", "",x ) 
+corpus1 <- tm_map(corpus1, content_transformer(removeat)) 
+inspect(corpus1[1:5])
+```
+
+```{r, message=FALSE, warning=FALSE}
+#Remove Dollar Sign
+removedollar <- function(x) gsub("\\$\\w+ *", "",x ) 
+corpus1 <- tm_map(corpus1, content_transformer(removedollar)) 
+inspect(corpus1[1:5])
+```
+
+```{r, message=FALSE, warning=FALSE}
+
+#Remove Punctuation 
+corpus1 <- tm_map(corpus1, removePunctuation) 
+inspect(corpus1[1:5]) 
+```
+
+```{r, message=FALSE, warning=FALSE}
+
+#Remove Numbers
+corpus1 <- tm_map(corpus1, removeNumbers) 
+inspect(corpus1[1:5]) 
+```
+```{r, message=FALSE, warning=FALSE}
+#to lowercase
+corpus1 <- tm_map(corpus1, content_transformer(tolower)) 
+inspect(corpus1[1:5])
+```
+```{r, message=FALSE, warning=FALSE}
+#Remove stop words
+corpus1 <- tm_map(corpus1, removeWords, stopwords('english')) 
+inspect(corpus1[1:5]) 
+```
+```{r, message=FALSE, warning=FALSE}
+#Remove White spaces
+corpus1 <- tm_map(corpus1, stripWhitespace)
+inspect(corpus1[1:5]) 
+
+```
+```{r, message=FALSE, warning=FALSE}
+
+dtm1 <- DocumentTermMatrix(corpus1)
+inspect(dtm1)
+```
+```{r, message=FALSE, warning=FALSE}
+dtm1 <- as.data.frame(as.matrix(dtm1))
+freq1 = data.frame(sort(colSums(as.matrix(dtm1)), decreasing=TRUE))
+#top 2 frequent words:
+head(freq1,2)
+```
+```{r, message=FALSE, warning=FALSE}
+
+wordcloud(rownames(freq1), freq1[,1], min.freq = 8, colors=brewer.pal(1, "Dark2"))
+
+```
+```{r, message=FALSE, warning=FALSE}
+#Work for the second dataset
+
+Apple2 <- read_csv("/home/nesma/SemesterII/BusinessDataAnalytics/HW6/Apple2.csv")
+head(Apple2)
+str(Apple2)
+```
+```{r, message=FALSE, warning=FALSE}
+# change encoding of our texts to “UTF-8”
+Apple2Text <- iconv(Apple2$text, to = "utf-8")
+# converting character vectors to specified encodings
+corpus2 <- Corpus(VectorSource(Apple2Text))
+#View Corpus
+inspect(corpus2[1:5])
+```
+
+```{r, message=FALSE, warning=FALSE}
+#Remove URL
+corpus2 <- tm_map(corpus2, content_transformer(removeURL)) 
+inspect(corpus2[1:5])
+```
+```{r, message=FALSE, warning=FALSE}
+#remove at
+corpus2 <- tm_map(corpus2, content_transformer(removeat)) 
+inspect(corpus2[1:5])
+```
+```{r, message=FALSE, warning=FALSE}
+#Remove Dollar Sign
+corpus2 <- tm_map(corpus2, content_transformer(removedollar)) 
+inspect(corpus2[1:5])
+```
+```{r, message=FALSE, warning=FALSE}
+#Remove Punctuation 
+corpus2 <- tm_map(corpus2, removePunctuation) 
+inspect(corpus2[1:5]) 
+```
+```{r, message=FALSE, warning=FALSE}
+#Remove Numbers
+corpus2 <- tm_map(corpus2, removeNumbers) 
+inspect(corpus2[1:5])
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+#to lowercase
+corpus2 <- tm_map(corpus2, content_transformer(tolower)) 
+inspect(corpus2[1:5])
+
+```
+```{r, message=FALSE, results="hide", warning=FALSE }
+#Remove stop words
+corpus2 <- tm_map(corpus2, removeWords, stopwords('english')) 
+inspect(corpus2[1:5]) 
+```
+
+```{r, message=FALSE, results="hide", warning=FALSE }
+#Remove White spaces
+corpus2 <- tm_map(corpus2, stripWhitespace)
+inspect(corpus2[1:5]) 
+
+```
+```{r, message=FALSE, warning=FALSE}
+
+dtm2 <- DocumentTermMatrix(corpus2)
+inspect(dtm2)
+```
+
+```{r, message=FALSE, warning=FALSE}
+
+dtm2 <- as.data.frame(as.matrix(dtm2))
+freq2 = data.frame(sort(colSums(as.matrix(dtm2)), decreasing=TRUE))
+#top 2 frequent words:
+head(freq2,2)
+```
+
+```{r, message=FALSE, warning=FALSE}
+wordcloud(rownames(freq2), freq2[,1] , min.freq = 8, colors=brewer.pal(1, "Dark2"))
+
+```
+
+
+**Q1.3**
+```{r, message=FALSE, warning=FALSE}
+#let’s calculate scores for our texts:
+#Before Cleaning of the first dataset
+scores <- get_nrc_sentiment(Apple1Text)
+summary(scores)
+scores$sentiment <- Apple1$sentiment
+```
+```{r, message=FALSE, warning=FALSE}
+#Generate barplot
+scores <- scores %>% 
+  summarise(
+    anger = sum(anger),
+    anticipation = sum(anticipation),
+    disgust = sum(disgust),
+    fear = sum(fear),
+    joy = sum(joy),
+    sadness = sum(sadness),
+    surprise = sum(surprise),
+    negative = sum(negative),
+    positive = sum(positive))
+
+
+scores_gathered <- scores %>% 
+  gather("sentiment", "value") %>%
+  mutate(perc = value )
+
+ggplot(scores_gathered, aes(x = sentiment, y = perc, fill = sentiment)) +
+  geom_histogram(stat = "identity") + 
+  coord_flip() + 
+  theme_bw() + 
+  scale_fill_brewer(palette="RdYlGn") 
+```
+
+
+
+
+```{r, message=FALSE, warning=FALSE}
+#Before Cleaning of the second dataset
+scores <- get_nrc_sentiment(Apple2Text)
+summary(scores)
+scores$sentiment <- Apple2$sentiment
+```
+```{r, message=FALSE, warning=FALSE}
+scores <- scores %>% 
+  summarise(
+    anger = sum(anger),
+    anticipation = sum(anticipation),
+    disgust = sum(disgust),
+    fear = sum(fear),
+    joy = sum(joy),
+    sadness = sum(sadness),
+    surprise = sum(surprise),
+    negative = sum(negative),
+    positive = sum(positive))
+
+
+scores_gathered <- scores %>% 
+  gather("sentiment", "value") %>%
+  mutate(perc = value )
+
+ggplot(scores_gathered, aes(x = sentiment, y = perc, fill = sentiment)) +
+  geom_histogram(stat = "identity") + 
+  coord_flip() + 
+  theme_bw() + 
+  scale_fill_brewer(palette="RdYlGn") 
+```
+
+
+
+#The positive value increased "after" the  announcing the quarterly profits
+
+
+
+
+**Q1.4**
+
+```{r, message=FALSE, warning=FALSE}
+#Combine datasets
+apple3 <- rbind(Apple1, Apple2)
+#Data cleaning and preparation for Random Forest Model
+apple3 <- na.omit(apple3)
+apple3Text <- iconv(apple3$text, to = "utf-8")
+corpus3 <- Corpus(VectorSource(apple3Text))
+corpus3 <- tm_map(corpus3, content_transformer(removeURL)) 
+inspect(corpus3[1:5])
+corpus3 <- tm_map(corpus3, content_transformer(removeat)) 
+corpus3 <- tm_map(corpus3, content_transformer(removedollar)) 
+#Remove Punctuation 
+corpus3 <- tm_map(corpus3, removePunctuation) 
+inspect(corpus3[1:5]) 
+#Remove Numbers
+corpus3 <- tm_map(corpus3, removeNumbers) 
+inspect(corpus3[1:5])
+corpus3 <- tm_map(corpus3, content_transformer(tolower)) 
+inspect(corpus3[1:5])
+#Remove stop words
+corpus3 <- tm_map(corpus3, removeWords, stopwords('english')) 
+inspect(corpus3[1:5]) 
+#Remove Special Characters
+specialChars<-function(x) gsub("[^[:alnum:][:blank:]?&/\\-]", "", x)
+corpus3 <-tm_map(corpus3, specialChars)
+#Remove White spaces
+corpus3 <- tm_map(corpus3, stripWhitespace)
+inspect(corpus3[1:5]) 
+```
+
+```{r, message=FALSE, warning=FALSE}
+#Document term matrix of the combined dataset
+dtm3 <- DocumentTermMatrix(corpus3)
+cleanedcorpus3 <- as.data.frame(as.matrix(dtm3))
+colnames(cleanedcorpus3) <- make.names(colnames(cleanedcorpus3))
+cleanedcorpus3$label <- apple3$sentiment
+#Split the dataset to 80-20, train and test set.
+train_idx <- sample(nrow(cleanedcorpus3), round(nrow(cleanedcorpus3)/100*80,0), replace = F) 
+train <- cleanedcorpus3[train_idx,]
+test <- cleanedcorpus3[-train_idx,]
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+train <- na.omit(train)
+#Convert the labels column to factor
+train$label <- as.factor(train$label) 
+#train the random forest model
+rf <- randomForest(label~., train)
+#Predict using the test set
+prediction <- predict(rf, test)
+#build the Confusion Matrix
+confMatrix <- as.matrix(table(test$label,prediction))
+ n = sum(confMatrix) # number of instances
+ nc = nrow(confMatrix) # number of classes
+ diag = diag(confMatrix) # number of correctly classified instances per class 
+ rowsums = apply(confMatrix, 1, sum) # number of instances per class
+ colsums = apply(confMatrix, 2, sum) # number of predictions per class
+ p = rowsums / n # distribution of instances over the actual classes
+ q = colsums / n # distribution of instances over the predicted classes
+# Accuracy is the diagonal summation over the total count
+accuracy = sum(diag) / n 
+#Model Accuracy:
+accuracy
+precision = diag / colsums 
+# Model Precesion
+precision
+recall = diag / rowsums
+#Model Recall
+recall
+f1 = 2 * precision * recall / (precision + recall) 
+data.frame(precision, recall, f1) 
+#one-vs-all confusion matrix for each class 
+oneVsAll = lapply(1 : nc,
+                      function(i){
+                        v = c(confMatrix[i,i],
+                              rowsums[i] - confMatrix[i,i],
+                              colsums[i] - confMatrix[i,i],
+                              n-rowsums[i] - colsums[i] + confMatrix[i,i]);
+                        return(matrix(v, nrow = 2, byrow = T))})
+oneVsAll
+s = matrix(0, nrow = 2, ncol = 2)
+for(i in 1 : nc){s = s + oneVsAll[[i]]}
+#Summing up the values of these 3 matrices results in one confusion matrix 
+s
+```
+
+
+# Part2.
+
+```{r, message=FALSE, warning=FALSE}
+library("igraph")
+library("ggplot2")
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+# read the data
+
+links <- read_csv("/home/nesma/SemesterII/BusinessDataAnalytics/HW6/Hi-tech-Edges.csv")
+View(links)
+str(links)
+
+nodes <- read_csv("/home/nesma/SemesterII/BusinessDataAnalytics/HW6/Hi-tech-Nodes.csv")
+View(nodes)
+str(nodes)
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+
+cat("Amount of rows in nodes data: ", nrow(nodes), "\n")
+cat("Amount of unique nodes: ", length(unique(nodes$Node)), "\n")
+cat("Amount of rows in links data: ", nrow(links), "\n")
+cat("Amount of unique links: ", nrow(unique(links[,c("from", "to")])), "\n")
+
+```
+**Build a directied graph:**
+```{r, message=FALSE, warning=FALSE}
+net <- graph_from_data_frame(d=links, vertices=nodes, directed=T)
+net
+E(net) # The edges of the "net" object
+V(net) # The vertices of the "net" object
+```
+**Q 2.1**
+
+```{r, message=FALSE, warning=FALSE}
+# a. Density of the network;
+edge_density(net)
+# b. Clustering coefficient;
+transitivity(net, type="global")
+# c. Reciprocity of the network;
+reciprocity(net) 
+# d. Average path length;
+mean_distance(net, directed=T)
+# e. Diameter (by considering weights). 
+diameter(net, directed=T, weights=E(net)$weight)
+```
+1. From the reciprocity value we can colnclude that more than half the vertices are mutually linked to each other.
+
+2. From the edge density, it reurns small number which means that the possibility of a fully connected graph is small.
+
+3. From the transitivity (Clustering Coefficient), it returns a small number which means that small number of adjacent vertices are connected.
+
+4. The  average path length between each pair of nodes in the graph is 2.63 which is a resinable distance.
+
+
+**Q 2.2**
+
+```{r, message=FALSE, warning=FALSE}
+#helping resources: http://www.shizukalab.com/toolkits/sna/plotting-networks-pt-2
+#https://kateto.net/netscix2016.html
+#Each node has different color, depending on department to which user belongs;
+V(net)$color=V(net)$Department
+V(net)$color=gsub("Management","red",V(net)$color) #Management will be red
+V(net)$color=gsub("Marketing","blue",V(net)$color) #Marketing will be blue
+V(net)$color=gsub("Development","green",V(net)$color) #Development will be green
+
+
+hs <- hub_score(net, weights=NA)$vector  #- Each node has different size depending on the hub size of the nodes;
+
+diam <- get_diameter(net, directed=T)
+diam
+#- Find the path of the diameter on the graph and colorize its edges only.
+ecol <- rep("gray80", ecount(net))
+ecol[E(net, path=diam)] <- "green"
+
+plot(net,edge.arrow.size=.4, remove.multiple = T, remove.loops = T,layout=layout_randomly,
+     edge.size= E(net)$weight,        #Each edge has different size depending on the weight;
+     vertex.shape = ifelse(V(net)$Gender == "female", "circle", "square"),  #- Each node has different shape, depending on gender of the user;
+     vertex.size=hs*50, #- Each node has different size depending on the hub size of the nodes;
+     vertex.label=V(net)$Name,        #Each node has a name associated with it;
+     vertex.label.color="black",
+     edge.color = ecol)
+```
+**Q 2.3**
+
+```{r, message=FALSE, warning=FALSE}
+wtc <- walktrap.community(as.undirected(net),modularity = T)
+wtc
+set.seed(50)
+plot(wtc, net,
+     edge.arrow.mode=0, 
+     edge.arrow.size=.2,
+     vertex.label.dist=2,
+     # vertex.label=V(net)$Name,
+     vertex.label.cex=.8,
+     vertex.label.color="black"
+     # ,layout=layout_components
+)
+
+```
+
+1. The second cluster (light Blue Cluster) contains "1", "6"
+
+2. Checking the Links dataset we have from 1 to	6 the weight is	16 and it's the only node that 1 is connected to it for this sample it make sense.
+
+3. For the third cluster 12 and 26 appear, checking the links table, we found that from 12 to 	26 has weight of 	25 which is the highest weight from 12
+
