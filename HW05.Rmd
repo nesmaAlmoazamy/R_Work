@@ -1,0 +1,309 @@
+---
+title: "HW5"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Import Required Packages **
+```{r , message=FALSE}
+library(readr)
+library(dplyr)
+library(ggplot2)
+# used in test normal distribution of the data
+# get the probabilty of second type error
+library(nortest) # install.packages("nortest")
+library(pwr) # install.packages("pwr")
+```
+# Task1 
+
+**Read the dataset then take a look to it's variables.**
+```{r, message=FALSE}
+dt <- read_delim("ab_clicks.csv","\t", escape_double = FALSE, trim_ws = TRUE)
+View(dt)
+# Different tags
+unique(dt$Tag_name)
+unique(dt$Version)
+
+```
+
+**Plot total amount of click on each version**
+```{r, message=FALSE}
+dt %>%
+  group_by(Version) %>%
+  summarise(sum = sum(No_clicks)) %>%
+  ggplot(aes(x=Version, y=sum)) + 
+  geom_histogram(stat = "identity", fill="#7ba367", bins = 30)+ theme_bw()
+
+```
+
+
+**take amount of the clicks on the button Interact at the different sites and plot it. From the plot we can see Interact has more clicks than the Learn version.**
+
+```{r, message=FALSE}
+btn_names <- c("INTERACT", "LEARN", "CONNECT", "HELP", "SERVICES")
+btns <- dt %>%
+  filter(Name %in% btn_names)
+# plot
+ggplot(btns, aes(x=Version, y=No_clicks)) + 
+  geom_histogram(stat = "identity" ,fill= "#7ba367", color="white", bins= 30) + theme_bw()
+
+```
+
+
+
+
+**Prepare data for caomparison between Interact and Learn version.**
+
+```{r, message=FALSE}
+# remove text that we are not interested in
+dt_cleaned <- filter(dt, Tag_name !='area')
+
+# here we need to chose only one from "learn, help, service" and compare it interact
+# remove other version from our dataset
+dt_interact_learn <- filter(dt_cleaned, Version %in% c("Interact", "Learn"))
+
+# run T-test, we are looking for the version by numpber of clicks 
+t.test(No_clicks ~ Version, data=dt_interact_learn)
+
+```
+
+**(Null hypothesis)H0: there is no difference between version interact and learn If we accepted it that means we can use any version either interact or learn.**
+
+**To decide either we should accept or reject the null hypothesis we should look at P-value if it’s below threshold (0.05) then we reject the null hypothesis. We can see that the P-value is greater than the threshold then we will accept the H0 and therefore there is no difference between the interact or learn version.**
+
+**the value of t calculated during the test and df is the degree of freedom. Also, we are confident to accept the H0 by 95%.**
+
+
+**We need to test if our data is normally distributed or not by plotting.**
+
+```{r, message=FALSE}
+ggplot(dt_cleaned, aes(x=No_clicks, fill=Version)) + geom_density(alpha=0.3) + theme_bw()
+ggplot(dt_cleaned, aes(x=No_clicks, fill=Version)) + geom_density(alpha=0.3) + theme_bw() + scale_x_log10()
+
+```
+
+**From the above plot, we can see that our data is not normally distributed..**
+
+
+**Below is another method to check the normality of our data. If our data is normally distributed below curve should be line with 45-degree angle**
+
+```{r, message=FALSE}
+#nortest
+qqnorm(filter(dt_cleaned, Version=='Interact')$No_clicks, cex=0.5) 
+qqline(filter(dt_cleaned, Version=='Interact')$No_clicks, col = 2)
+```
+
+**We can use Wilcoxon test for normality instead of t-test (as the Normality assumption is not fulfilled), or we can use transform No_clicks to log10 and we can find that both tests get the same results..**
+
+
+```{r, message=FALSE}
+
+wilcox.test(No_clicks ~ Version, data=dt_interact_learn)
+
+```
+
+
+```{r, message=FALSE}
+dt_interact_learn <- dt_interact_learn %>%
+  mutate(log_clicks = log10(No_clicks))
+
+wilcox.test(log_clicks ~ Version, data=dt_interact_learn) # same result
+```
+```{r, message=FALSE}
+pwr.t.test(d = 0.2, power=0.8) 
+```
+
+
+
+**Using Different type of test: "Test of proportion".**
+
+```{r, message=FALSE}
+total_clicks <- group_by(dt, Version) %>%
+  summarise(total = sum(No_clicks))   # total number of clicks
+dt_button <- filter(dt, Name %in% c("SERVICES", "HELP", "LEARN","CONNECT", "INTERACT")) %>% 
+  # choose only areas we focus
+  left_join(total_clicks, by = "Version")  %>%
+  mutate(proportions = No_clicks/total)# combine
+dt_button
+```
+**Let's take what we are interested in “Interact” and “Learn”"**
+
+```{r, message=FALSE}
+prop.test(x=dt_button$No_clicks[c(1,3)], n=dt_button$total[c(1,3)]) #n: total amounts of the clicks
+```
+**Here the P-Value is greater than the threshold(0.05) so we will accept the null hypothesis. **
+
+
+**Calculate the power of the proportion test:**
+```{r, message=FALSE}
+power.prop.test(n=dt_button$total[c(1,3)], p1=0.01130856, p2=0.01271186)
+```
+**n: The total number of the clicks for the two options "Interact= 3714" and "Learn= 1652". We can see also the power of the test is not that much large to be confident with this test.**
+
+**Based on this proportion test the idea of change interact with learn is not correct we accept the null hypothesis**
+
+
+```{r}
+pwr.2p2n.test(h=0.1, power=0.8, n1=3714)
+```
+**The power param signifies the prob of the second type error of your data, we assume that no type error with 80% probability. Sig.level: indicates the probability of type one error.**
+
+# concluded results:
+We performed two different tests using t-test, and proportion test. Using the tests results we will accept the null hypothesis, since the P-Value is greater than the threshold. 
+
+
+# Task2:
+**1. Read about Multiple comparison problem.**
+Multiple comparisons arise when a statistical analysis involves multiple simultaneous statistical tests, each of which has a potential to produce a "discovery". A stated confidence level generally applies only to each test considered individually, but often it is desirable to have a confidence level for the whole family of simultaneous tests
+because as the number of comparisons increases, it becomes more likely that the groups being compared will appear to differ in terms of at least one attribute.
+Our confidence that a result will generalize to independent data should generally be weaker if it is observed as part of an analysis that involves multiple comparisons, rather than an analysis that involves only a single comparison.
+
+
+**2. 1000 different tests related to landing page comparisons of different versions and collected p-values in a vector to see where number of clicks are statistically significant: **
+
+
+```{r, message=FALSE}
+pwr.t.test(alternative = "two.sided", power=0.8,d = 0.2) 
+
+
+set.seed(3583)
+p_values <- abs(rnorm(1000, 0, sd=0.2))
+p_values <- ifelse(p_values>1, 0, p_values)
+p_values
+```
+**3. How many tests are statistically significant (under α=0.05)**
+
+
+```{r, message=FALSE}
+count = 0
+
+for(i in 1:length(p_values)) {
+  if(p_values[i] < 0.05)
+  {
+    count = count + 1
+  }
+}
+cat("number of tests that are statistically significant are  ", count)
+
+```
+
+**4. Use p.adjust function to perform corrections for multiple comparisons. Choose 2 different methods.**
+
+**Compare number of significant tests after the corrections. What has changed?**
+this method is used for adjusting the p-values  to account for the multiple comparisons issue it returns the correction adjastments for the p values. The FDR method stands for false discovery rate that interrpret the rate of type one errors in the null hypothesis testing when having multiple comparisons.
+
+Both bonferroni, fdr are error rate controlling procedures
+
+The result showed that after using the adjusted P-values, it lead to a very high rate of false negatives because bonferroni has a lack of power for the correction.
+
+The number of significant tests after corrections is zero, while before using adjust function it was 203.
+
+
+```{r, message=FALSE}
+# 'arg' should be one of "holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none"
+
+bonferroniValues <- p.adjust(p_values, method="bonferroni", n =length(p_values))
+print(bonferroniValues)
+count = 0
+
+for(i in 1:length(bonferroniValues)) {
+  if(bonferroniValues[i] < 0.05)
+  {
+    count = count + 1
+  }
+}
+cat("number of tests for bonferroni that are statistically significant are  ", count)
+```
+
+```{r, message=FALSE}
+
+
+fdrValues <- p.adjust(p_values, method="fdr", n = length(p_values))
+print(fdrValues)
+count = 0
+for(i in 1:length(fdrValues)) {
+  if(fdrValues[i] < 0.05)
+  {
+    count = count + 1
+  }
+}
+cat("number of fdr tests that are statistically significant are  ", count)
+
+```
+
+# Task. 3.
+
+**1. Check whether the difference in conversion rate is significant. Calculate the number of instances to collect to achieve the power of the test (power=0.8). What can you claim based on those results?**
+
+```{r, message=FALSE}
+library(readr)
+dataset <- read_csv("conversion.csv")
+View(dataset)
+
+```
+the ouutput of the prob.test function is  p-value = 0.2458 which is not significant also the proportions are: 
+   prop 1    prop 2 
+0.1038462 0.1288462 
+we will use those proportions for the power.prop.test to get the number of samples needed.
+
+The output of power.prop.test is 
+              n = 2576.219
+which is the number of instances that is needed to achieve power = 0.8. for this function we used ES.h to calculate the value of d for pwr.t.test function.
+based on those results, we need have more number of instances to get higher power value for out test.
+
+we need to claim that in order to have power = 0.8, we need to have number of samples n = 2576.219. also the significance level is 0.05. we also used ES.h to calculate the effect size for the pwr.t.test function.
+
+```{r, message=FALSE}
+
+myn <- as.matrix(dataset[,0:2])
+prop.test(x=myn)
+power.prop.test(n=dataset$converted[c(1,2)], p1=0.1038462, p2=0.1288462  )
+
+h <- ES.h(0.1038462, 0.1288462)
+#to find the sample size needed
+pwr.t.test(d= h,power = 0.8,type="two.sample",alternative="two.sided")
+
+pwr.2p2n.test( h = h, sig.level = 0.05, n1 = 54, n2=67)
+```
+**2. Are the result significant? What is the power of this test? Did the ratios between the first and the second experiments change? What is the lesson here?**
+
+the P-value of the second experiment is soo small while The power of this test is  0.2784212 which is much better than the previous test. 
+
+The higher the power value means that that we need to increase the confidence that we have in the result. so it means that we need a larger sample size.
+
+The propabilities (Ratios) changed a little bit and the power for the second exprement is more than the first.
+
+
+the lesson learnet is that for having higher power value we need
+ smaller value of sig_level means that we need to increase the confidence that we have in the result. so it means that we need a larger sample size.
+ 
+Also we need more number of observations to have more confidence level.
+
+
+
+
+```{r, message=FALSE}
+dataset2 <- read_csv("conversion2.csv")
+View(dataset2)
+```
+
+
+```{r, message=FALSE}
+prop.test(x=dataset2$converted[c(1,2)], n=dataset2$total[c(1,2)])
+# power.prop.test(n=dataset2$converted[c(1,2)], p1=0.1042308, p2=0.1296154  )
+h <- ES.h(0.1042308, 0.1296154)
+# pwr.t.test(d= h,power = 0.8,type="two.sample",alternative="two.sided")
+
+pwr.2p2n.test(h = h, n1=542, n2 = 674, sig.level = 0.05)
+```
+
+
+
+
+
+
